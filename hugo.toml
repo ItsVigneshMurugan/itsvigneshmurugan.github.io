@@ -62,5 +62,5 @@ summaryLength = 30
     [[menu.icons]]
         identifier = "github"
         name = "Github"
-        url = "https://github.com/big-vi"
+        url = "https://github.com/ItsVigneshMurugan"
         weight = 10

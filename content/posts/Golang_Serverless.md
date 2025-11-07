@@ -389,4 +389,4 @@ EventBridge rule let you create a cron that triggers the Lambda function.
 
 
 
-The code is available in [Github repo](https://github.com/Big-Vi/go-aws-lambda-shopify)
+The code is available in [Github repo](https://github.com/ItsVigneshMurugan/go-aws-lambda-shopify)
