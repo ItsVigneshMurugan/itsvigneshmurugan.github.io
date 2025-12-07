@@ -67,17 +67,17 @@ Once cross-region PrivateLink becomes available in your regions, the architectur
 ┌─────────────────────────────────────┐
 │  NZ Region (ap-southeast-6)         │
 │                                     │
-│  ┌─────────────────────────────┐   │
-│  │  Application VPC            │   │       Cross-Region
-│  │                             │   │       PrivateLink
-│  │  ┌─────────────────────┐   │   │      (when available)
-│  │  │  ECS Tasks          │   │   │           │
-│  │  │  └─► VPC Endpoint ──┼───┼───┼───────────┘
-│  │  │      (direct to     │   │   │
-│  │  │       Sydney        │   │   │
-│  │  │       Bedrock)      │   │   │
-│  │  └─────────────────────┘   │   │
-│  └─────────────────────────────┘   │
+│  ┌─────────────────────────────┐    │
+│  │  Application VPC            │    │       Cross-Region
+│  │                             │    │       PrivateLink
+│  │  ┌─────────────────────┐    │    │      (when available)
+│  │  │  ECS Tasks          │    │    │           │
+│  │  │  └─► VPC Endpoint ──┼─── ┼─── ┼───────────┘
+│  │  │      (direct to     │    │    │
+│  │  │       Sydney        │    │    │
+│  │  │       Bedrock)      │    │    │
+│  │  └─────────────────────┘    │    │
+│  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 
 No VPC peering, no routes, no DNS zones needed!
@@ -92,8 +92,10 @@ When you create a VPC endpoint with `private_dns_enabled = true`, AWS automatica
 ```bash
 # From Sydney VPC
 $ nslookup bedrock-runtime.ap-southeast-2.amazonaws.com
-Address: 10.1.45.123  # Private IP ✓
+Address: 10.1.20.231  # Private IP ✓
 ```
+
+![After Cross Region Connectivity](/images/after-cross-region-connectivity.png)
 
 But from the NZ VPC across the peering connection:
 
@@ -102,6 +104,9 @@ But from the NZ VPC across the peering connection:
 $ nslookup bedrock-runtime.ap-southeast-2.amazonaws.com
 Address: 13.54.114.61  # Public IP ✗
 ```
+
+![Before Cross Region Connectivity](/images/before-cross-region-connectivity.png)
+
 
 The DNS query returns public IPs because the private DNS zone created by the VPC endpoint doesn't propagate across VPC peering. Your traffic would go over the public internet, defeating the entire purpose of the private connectivity infrastructure.
 
