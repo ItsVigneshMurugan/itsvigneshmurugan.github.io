@@ -1,7 +1,7 @@
 ---
 title: "Private Cross-Region AWS Bedrock Connectivity with VPC Peering"
 date: 2025-12-07T00:00:00Z
-draft: true
+draft: false
 tags: ['aws', 'bedrock', 'vpc-peering', 'terraform', 'networking', 'ai', 'infrastructure']
 ---
 
