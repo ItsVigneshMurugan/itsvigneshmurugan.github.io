@@ -5,8 +5,6 @@ draft: false
 tags: ['aws', 'bedrock', 'vpc-peering', 'terraform', 'networking', 'ai', 'infrastructure']
 ---
 
-## The Challenge
-
 AWS Bedrock isn't available in all regions. If you're running your application in a region without Bedrock support (like New Zealand / ap-southeast-6), you face a dilemma: either relocate your entire infrastructure or access Bedrock over the public internet from a supported region like Sydney (ap-southeast-2). 
 
 Public internet access introduces several issues:
@@ -31,19 +29,19 @@ The solution consists of:
 ┌─────────────────────────────────────┐       ┌──────────────────────────────────┐
 │  NZ Region (ap-southeast-6)         │       │  Sydney Region (ap-southeast-2)  │
 │                                     │       │                                  │
-│  ┌─────────────────────────────┐   │       │  ┌──────────────────────────┐   │
-│  │  Application VPC            │   │       │  │  Sydney VPC              │   │
-│  │  10.0.0.0/16                │   │       │  │  10.1.0.0/16             │   │
-│  │                             │   │       │  │                          │   │
-│  │  ┌─────────────────────┐   │   │       │  │  ┌──────────────────┐   │   │
-│  │  │  ECS Tasks/Fargate  │   │◄──┼───────┼──┼──┤ VPC Endpoints    │   │   │
-│  │  │                     │   │   │  VPC  │  │  │ - bedrock        │   │   │
-│  │  │  Route53 PHZ:       │   │   │ Peer  │  │  │ - bedrock-runtime│   │   │
-│  │  │  bedrock*.aws.com   │   │   │       │  │  │ - bedrock-agent  │   │   │
-│  │  │  → 10.1.x.x         │   │   │       │  │  │ - bedrock-agent- │   │   │
-│  │  │                     │   │   │       │  │  │   runtime        │   │   │
-│  │  └─────────────────────┘   │   │       │  │  └──────────────────┘   │   │
-│  └─────────────────────────────┘   │       │  └──────────────────────────┘   │
+│  ┌─────────────────────────────┐    │       │  ┌──────────────────────────┐    │
+│  │  Application VPC            │    │       │  │  Sydney VPC              │    │
+│  │  10.0.0.0/16                │    │       │  │  10.1.0.0/16             │    │
+│  │                             │    │       │  │                          │    │
+│  │  ┌─────────────────────┐    │    │       │  │  ┌──────────────────┐    │    │
+│  │  │  ECS Tasks/Fargate  │    │◄── ┼───────┼──┼──┤ VPC Endpoints    │    │    │
+│  │  │                     │    │    │  VPC  │  │  │ - bedrock        │    │    │
+│  │  │  Route53 PHZ:       │    │    │ Peer  │  │  │ - bedrock-runtime│    │    │
+│  │  │  bedrock*.aws.com   │    │    │       │  │  │ - bedrock-agent  │    │    │
+│  │  │  → 10.1.x.x         │    │    │       │  │  │ - bedrock-agent- │    │    │
+│  │  │                     │    │    │       │  │  │   runtime        │    │    │
+│  │  └─────────────────────┘    │    │       │  │  └──────────────────┘    │    │
+│  └─────────────────────────────┘    │       │  └──────────────────────────┘    │
 └─────────────────────────────────────┘       └──────────────────────────────────┘
 ```
 
