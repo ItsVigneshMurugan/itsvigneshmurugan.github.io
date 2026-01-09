@@ -41,7 +41,7 @@ If a container running as root was compromised:
 
 - **Kernel bugs** → Full host root access
 - **Misconfigured mounts** → Direct host filesystem access
-- **Device nodes** → Raw disk access
+- **[Device nodes](Linux_Device_Nodes_Deep_Dive.md)** → Raw disk access
 - **Privileged syscalls** → Easy container escape
 
 Containers provided process isolation, but not privilege isolation. The kernel had no way to differentiate between "root in container" and "root on host."
