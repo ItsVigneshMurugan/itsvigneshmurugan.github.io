@@ -26,6 +26,7 @@ summaryLength = 30
     icon512 = "/android-chrome-512x512.png"
 
     imageInArticlePreview = true
+    fitImageInArticlePreview = true
 
     showRss = false
 

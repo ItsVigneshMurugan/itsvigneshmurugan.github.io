@@ -2,10 +2,10 @@
 title: "Deploying a KServe LLM Inference Platform on a Rented GPU VM (Vast.ai + k3s + vLLM)"
 date: 2026-05-31T00:00:00Z
 draft: false
+image: /images/kserve-llm-vast-hero.png
+alt: "KServe LLM Inference on a Rented GPU — Vast.ai + k3s + vLLM + Qwen 2.5, $0.24 total"
 tags: ['kserve', 'vllm', 'k3s', 'kubernetes', 'gpu', 'vast-ai', 'huggingface', 'llm', 'inference']
 ---
-
-![KServe LLM Inference on a Rented GPU — Vast.ai + k3s + vLLM + Qwen 2.5, $0.24 total](/images/kserve-llm-vast-hero.png)
 
 I wanted to test [KServe](https://github.com/kserve/kserve)'s LLM inference stack — `huggingfaceserver`, vLLM, and the new `LLMInferenceService` CRD — but the moment you touch any of those you need an NVIDIA GPU. My Mac is Apple Silicon. KServe's `huggingfaceserver` image is amd64-only and hard-pinned to CUDA.
 
@@ -32,7 +32,7 @@ So: rent an amd64 GPU box.
 - **Lambda Cloud**: cleanest VMs, but $0.75/hr minimum, billed in chunks.
 - **Paperspace**: nice UI, but more expensive for short bursts.
 - **EKS with GPU node pool**: realistic prod-like setup, but cluster management overhead and a fixed control-plane fee.
-- **Vast.ai**: $0.20-0.40/hr for an RTX 3060/5060 class GPU, per-second billing, $5 minimum top-up. Perfect for "I want to test something for an hour".
+- **Vast.ai**: $0.20-0.40/hr for an RTX 3060/5060 class GPU, per-second billing. Perfect for "I want to test something for an hour".
 
 The catch: most Vast hosts run *containers*, not VMs. Containers don't allow privileged ops like `bind-mount /var/lib/kubelet` or `overlay` mounts — both of which Kubernetes needs. After bouncing off that wall (more on that below), the fix is to **specifically pick a `VM` template**. Vast has both. The VM templates are slightly pricier but behave like real machines.
 
