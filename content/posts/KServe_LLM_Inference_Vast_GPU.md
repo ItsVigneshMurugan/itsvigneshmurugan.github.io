@@ -5,6 +5,8 @@ draft: false
 tags: ['kserve', 'vllm', 'k3s', 'kubernetes', 'gpu', 'vast-ai', 'huggingface', 'llm', 'inference']
 ---
 
+![KServe LLM Inference on a Rented GPU — Vast.ai + k3s + vLLM + Qwen 2.5, $0.24 total](/images/kserve-llm-vast-hero.png)
+
 I wanted to test [KServe](https://github.com/kserve/kserve)'s LLM inference stack — `huggingfaceserver`, vLLM, and the new `LLMInferenceService` CRD — but the moment you touch any of those you need an NVIDIA GPU. My Mac is Apple Silicon. KServe's `huggingfaceserver` image is amd64-only and hard-pinned to CUDA.
 
 I didn't want to buy a GPU just to kick the tyres. So: **rent one for an hour, see if the runtime even works, decide later.** This post is the playbook I landed on after a few false starts — Vast.ai VM → k3s → KServe Standard mode → Qwen 2.5 on vLLM, end-to-end in about 30 minutes.
