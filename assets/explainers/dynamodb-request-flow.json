@@ -1,0 +1,247 @@
+{
+  "title": "One DynamoDB partition: a client, a request router with its caches, and a replication group of three replicas in three Availability Zones",
+  "viewBox": "0 0 1040 500",
+  "caption": "Based on Elhemali et al., <em>Amazon DynamoDB</em>, USENIX ATC 2022. One partition is shown; real storage nodes host replicas of many partitions. Which replica serves an eventually consistent read, and where a log replica is placed, are illustrative: the paper doesn't say.",
+  "stateKeys": ["Leader", "Replicas up", "Write quorum", "Client sees"],
+  "zones": [
+    { "id": "az1", "label": "AZ 1", "x": 470, "y": 130, "w": 420, "h": 110 },
+    { "id": "az2", "label": "AZ 2", "x": 470, "y": 250, "w": 420, "h": 110 },
+    { "id": "az3", "label": "AZ 3", "x": 470, "y": 370, "w": 420, "h": 110 }
+  ],
+  "nodes": [
+    { "id": "client", "label": "Client", "sub": "your app", "x": 10, "y": 262, "w": 110, "h": 60 },
+    { "id": "router", "label": "Request router", "sub": "auth · route · admit", "x": 210, "y": 250, "w": 180, "h": 84 },
+    { "id": "iam", "label": "IAM · KMS", "sub": "cached on router", "x": 30, "y": 40, "w": 150, "h": 56 },
+    { "id": "memds", "label": "MemDS", "sub": "partition metadata", "x": 220, "y": 40, "w": 160, "h": 56 },
+    { "id": "gac", "label": "GAC", "sub": "tokens per table", "x": 410, "y": 40, "w": 150, "h": 56 },
+    { "id": "r1", "label": "Replica", "sub": "WAL + B-tree", "x": 520, "y": 142, "w": 150, "h": 86, "valueSlot": true },
+    { "id": "r2", "label": "Replica", "sub": "WAL + B-tree", "x": 520, "y": 262, "w": 150, "h": 86, "valueSlot": true },
+    { "id": "r3", "label": "Replica", "sub": "WAL + B-tree", "x": 520, "y": 382, "w": 150, "h": 86, "valueSlot": true },
+    { "id": "log3", "label": "Log replica", "sub": "recent WAL only", "x": 730, "y": 386, "w": 140, "h": 78, "hidden": true },
+    { "id": "s3", "label": "Amazon S3", "sub": "archived WAL", "x": 905, "y": 262, "w": 125, "h": 60 }
+  ],
+  "scenarios": [
+    {
+      "id": "put-item",
+      "title": "Write",
+      "initial": {
+        "leader": "r1",
+        "values": { "r1": "cart#42 = v1", "r2": "cart#42 = v1", "r3": "cart#42 = v1" },
+        "state": { "Leader": "AZ 1", "Replicas up": "3 of 3", "Write quorum": "—", "Client sees": "—" }
+      },
+      "steps": [
+        {
+          "title": "A write arrives",
+          "text": "The app calls <code>PutItem</code> to change <code>cart#42</code> from <code>v1</code> to <code>v2</code>. Every request lands first on a <strong>request router</strong>, a fleet that sits in front of the storage nodes.",
+          "messages": [{ "from": "client", "to": "router", "label": "PutItem" }],
+          "set": { "state": { "Client sees": "waiting" } }
+        },
+        {
+          "title": "Who is calling?",
+          "text": "The router authenticates the request with IAM, and with KMS for tables encrypted with customer keys. It answers from a cache that it refreshes in the background, so if IAM or KMS has an outage, routers keep using cached results for a set period. The paper calls this <strong>static stability</strong>.",
+          "messages": [{ "from": "router", "to": "iam", "label": "cached check", "kind": "async" }]
+        },
+        {
+          "title": "Which partition owns the key?",
+          "text": "The partition key is hashed, and each partition owns a contiguous slice of the hashed key range. The router's partition-map cache says which storage nodes host that partition. Even on a cache hit, the router refreshes the entry from <strong>MemDS</strong> in the background, so MemDS sees the same load whether router caches are warm or cold.",
+          "messages": [{ "from": "router", "to": "memds", "label": "refresh partition", "kind": "async" }]
+        },
+        {
+          "title": "Is there capacity?",
+          "text": "Admission control. The router spends a token from its local bucket for this table. <strong>Global admission control (GAC)</strong> refills that bucket every few seconds based on the whole table's consumption, so traffic aimed at a few items can still use up to a partition's maximum capacity. Per-partition token buckets remain as a cap.",
+          "messages": [{ "from": "router", "to": "gac", "label": "refill tokens", "kind": "async" }]
+        },
+        {
+          "title": "Send it to the leader",
+          "text": "The partition has three replicas in three Availability Zones, forming a <strong>replication group</strong> that runs Multi-Paxos. Only the leader accepts writes.",
+          "messages": [{ "from": "router", "to": "r1", "label": "PutItem" }]
+        },
+        {
+          "title": "Replicate the log record",
+          "text": "The leader generates a write-ahead log record for the change and sends it to both peers.",
+          "messages": [
+            { "from": "r1", "to": "r2", "label": "WAL record" },
+            { "from": "r1", "to": "r3", "label": "WAL record", "with": true, "curve": 200 }
+          ],
+          "set": { "values": { "r1": "cart#42 = v2" }, "state": { "Write quorum": "1 of 3" } }
+        },
+        {
+          "title": "Quorum",
+          "text": "AZ 2 persists the record in its own write-ahead log and replies. Two of three replicas is a <strong>write quorum</strong>, so the write can be acknowledged. The leader doesn't wait for AZ 3.",
+          "messages": [{ "from": "r2", "to": "r1", "label": "persisted", "kind": "reply" }],
+          "set": { "values": { "r2": "cart#42 = v2" }, "state": { "Write quorum": "2 of 3 ✓" } }
+        },
+        {
+          "title": "Acknowledge",
+          "text": "The leader confirms the write and the router returns success to the app.",
+          "messages": [
+            { "from": "r1", "to": "router", "label": "OK", "kind": "reply" },
+            { "from": "router", "to": "client", "label": "200 OK", "kind": "reply" }
+          ],
+          "set": { "state": { "Client sees": "success" } }
+        },
+        {
+          "title": "Catch up and archive",
+          "text": "AZ 3 persists the record too. In the background, write-ahead logs are archived to S3 after checks on every entry's checksum and sequence number. That archive feeds backups, point-in-time restore over the last 35 days, and the <em>scrub</em> process that compares live replicas with a copy rebuilt from the log.",
+          "messages": [{ "from": "r1", "to": "s3", "label": "archive WAL", "kind": "async" }],
+          "set": { "values": { "r3": "cart#42 = v2" }, "state": { "Write quorum": "3 of 3" } }
+        }
+      ]
+    },
+    {
+      "id": "strong-read",
+      "title": "Strong read",
+      "initial": {
+        "leader": "r1",
+        "values": { "r1": "cart#42 = v2", "r2": "cart#42 = v2", "r3": "cart#42 = v1" },
+        "state": { "Leader": "AZ 1", "Replicas up": "3 of 3", "Write quorum": "OK", "Client sees": "—" }
+      },
+      "steps": [
+        {
+          "title": "A read that must be current",
+          "text": "The app calls <code>GetItem</code> with <code>ConsistentRead</code> set. At this moment AZ 3 hasn't applied the latest write yet: it still holds <code>v1</code>.",
+          "messages": [{ "from": "client", "to": "router", "label": "GetItem" }],
+          "set": { "state": { "Client sees": "waiting" } }
+        },
+        {
+          "title": "Only the leader answers",
+          "text": "After the same authentication, routing and admission checks as a write, the router sends the read to the partition's leader. Only the leader serves strongly consistent reads, because every write goes through it.",
+          "messages": [{ "from": "router", "to": "r1", "label": "read" }]
+        },
+        {
+          "title": "The latest value",
+          "text": "The app gets <code>v2</code>, the latest acknowledged value, even though AZ 3 is behind.",
+          "messages": [
+            { "from": "r1", "to": "router", "label": "v2", "kind": "reply" },
+            { "from": "router", "to": "client", "label": "v2", "kind": "reply" }
+          ],
+          "set": { "state": { "Client sees": "v2 (latest)" } }
+        }
+      ]
+    },
+    {
+      "id": "eventual-read",
+      "title": "Eventual read",
+      "initial": {
+        "leader": "r1",
+        "values": { "r1": "cart#42 = v2", "r2": "cart#42 = v2", "r3": "cart#42 = v1" },
+        "state": { "Leader": "AZ 1", "Replicas up": "3 of 3", "Write quorum": "OK", "Client sees": "—" }
+      },
+      "steps": [
+        {
+          "title": "The same read, relaxed",
+          "text": "The app calls <code>GetItem</code> without <code>ConsistentRead</code>. AZ 3 still holds <code>v1</code>.",
+          "messages": [{ "from": "client", "to": "router", "label": "GetItem" }],
+          "set": { "state": { "Client sees": "waiting" } }
+        },
+        {
+          "title": "Any replica can answer",
+          "text": "Any replica in the group can serve an eventually consistent read, which spreads reads across all three. Suppose this one goes to AZ 3.",
+          "messages": [{ "from": "router", "to": "r3", "label": "read" }]
+        },
+        {
+          "title": "A slightly old value",
+          "text": "AZ 3 hasn't applied the latest write, so the app gets <code>v1</code>. A moment later the same read would return <code>v2</code>. That's the trade: any replica can answer, but the answer may be slightly behind.",
+          "messages": [
+            { "from": "r3", "to": "router", "label": "v1", "kind": "reply" },
+            { "from": "router", "to": "client", "label": "v1", "kind": "reply" }
+          ],
+          "set": { "state": { "Client sees": "v1 (stale)" } }
+        }
+      ]
+    },
+    {
+      "id": "replica-fails",
+      "title": "Replica fails",
+      "initial": {
+        "leader": "r1",
+        "values": { "r1": "cart#42 = v2", "r2": "cart#42 = v2", "r3": "cart#42 = v2" },
+        "state": { "Leader": "AZ 1", "Replicas up": "3 of 3", "Write quorum": "OK", "Client sees": "—" }
+      },
+      "steps": [
+        {
+          "title": "A storage node dies",
+          "text": "The storage node holding the AZ 3 replica fails. The two remaining replicas are still a write quorum, but one more failure would stop writes to this partition.",
+          "active": ["r3"],
+          "set": { "down": ["r3"], "state": { "Replicas up": "2 of 3", "Write quorum": "OK, no margin" } }
+        },
+        {
+          "title": "A full rebuild is slow",
+          "text": "Healing a storage replica means copying its B-tree and write-ahead log to a new node. That takes several minutes.",
+          "active": ["r3"]
+        },
+        {
+          "title": "Add a log replica instead",
+          "text": "The leader adds a <strong>log replica</strong>. It stores only recent write-ahead log entries, with no B-tree, so it's ready in a few seconds. Like an acceptor in Paxos, it counts towards the write quorum.",
+          "messages": [{ "from": "r1", "to": "log3", "label": "recent WAL", "curve": 50 }],
+          "set": { "show": ["log3"], "state": { "Replicas up": "2 + log replica", "Write quorum": "OK" } }
+        },
+        {
+          "title": "Writes keep flowing",
+          "text": "New log records go to AZ 2 and the log replica. The log replica holds no key-value data, so it can't serve reads, but it keeps the partition writable and durable while a full replacement is built.",
+          "messages": [
+            { "from": "r1", "to": "r2", "label": "WAL record" },
+            { "from": "r1", "to": "log3", "label": "WAL record", "with": true, "curve": 50 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "leader-fails",
+      "title": "Leader fails",
+      "initial": {
+        "leader": "r1",
+        "values": { "r1": "cart#42 = v2", "r2": "cart#42 = v2", "r3": "cart#42 = v2" },
+        "state": { "Leader": "AZ 1", "Replicas up": "3 of 3", "Write quorum": "OK", "Client sees": "—" }
+      },
+      "steps": [
+        {
+          "title": "Missed heartbeats",
+          "text": "AZ 3 stops hearing the leader's heartbeats. The leader is healthy; only the path between those two replicas is broken. This is a <strong>gray failure</strong>: some components see a problem and others don't.",
+          "messages": [{ "from": "r1", "to": "r3", "label": "heartbeat ✕", "kind": "fail", "curve": 200 }]
+        },
+        {
+          "title": "Ask before acting",
+          "text": "A new election would interrupt writes, so before starting one, AZ 3 asks the other replica whether it can still reach the leader.",
+          "messages": [{ "from": "r3", "to": "r2", "label": "leader OK?" }]
+        },
+        {
+          "title": "Stand down",
+          "text": "It can, so AZ 3 drops its attempt. No election, no interruption. The paper reports that this check significantly cut spurious leader elections.",
+          "messages": [{ "from": "r2", "to": "r3", "label": "yes, healthy", "kind": "reply" }]
+        },
+        {
+          "title": "Now the leader really fails",
+          "text": "This time the leader's node dies. Writes and strongly consistent reads for this partition stop until there's a new leader. Eventually consistent reads can still go to AZ 2 or AZ 3.",
+          "active": ["r1"],
+          "set": { "down": ["r1"], "leader": null, "state": { "Leader": "none", "Replicas up": "2 of 3", "Write quorum": "no leader" } }
+        },
+        {
+          "title": "Elect a new leader",
+          "text": "The surviving replicas detect the failure and elect AZ 2 using Multi-Paxos.",
+          "messages": [
+            { "from": "r2", "to": "r3", "label": "propose leader" },
+            { "from": "r3", "to": "r2", "label": "accept", "kind": "reply" }
+          ],
+          "set": { "leader": "r2", "state": { "Leader": "AZ 2 (elected)" } }
+        },
+        {
+          "title": "Wait out the old lease",
+          "text": "The new leader serves no writes or consistent reads until the old leader's lease has expired, which takes a couple of seconds. That guarantees two leaders never serve at the same time. It's also why a false failure detection costs availability.",
+          "active": ["r2"],
+          "set": { "state": { "Leader": "AZ 2 (lease wait)" } }
+        },
+        {
+          "title": "Serving again",
+          "text": "AZ 2 accepts writes, with AZ 3 completing the quorum, while autoadmin replaces the failed replica. For planned deployments, leaders hand over voluntarily so nobody waits for a lease.",
+          "messages": [
+            { "from": "client", "to": "router", "label": "PutItem" },
+            { "from": "router", "to": "r2", "label": "PutItem" },
+            { "from": "r2", "to": "r3", "label": "WAL record" }
+          ],
+          "set": { "state": { "Leader": "AZ 2", "Write quorum": "2 of 3 ✓" } }
+        }
+      ]
+    }
+  ]
+}

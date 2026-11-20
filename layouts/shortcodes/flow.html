@@ -1,0 +1,40 @@
+{{- /*
+  Step-through architecture explainer.
+
+  Usage in a post:
+    {{< flow data="explainers/dynamodb-request-flow.json" >}}
+
+  The JSON lives under assets/. Its shape is documented at the top of
+  assets/explainers/flow.js. Readers can deep-link to a scenario (#put-item)
+  or a step within it (#put-item-6).
+*/ -}}
+{{- $src := .Get "data" -}}
+{{- $res := resources.Get $src -}}
+{{- if not $res -}}
+  {{- errorf "flow shortcode: %q not found under assets/ (%s)" $src .Position -}}
+{{- end -}}
+{{- $d := $res | transform.Unmarshal -}}
+{{- $id := replace (path.Base $src) ".json" "" -}}
+{{- $css := resources.Get "explainers/flow.css" | minify | fingerprint -}}
+{{- $js := resources.Get "explainers/flow.js" | minify | fingerprint -}}
+{{- if not (.Page.Store.Get "flowAssets") -}}
+  {{- .Page.Store.Set "flowAssets" true -}}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">
+<script src="{{ $js.RelPermalink }}" integrity="{{ $js.Data.Integrity }}" defer></script>
+{{- end }}
+<figure class="flow" id="flow-{{ $id }}" data-flow="{{ $d | jsonify }}">
+  <details class="flow-transcript">
+    <summary>Read every step as text</summary>
+    {{- range $d.scenarios }}
+    <p class="flow-transcript-title"><strong>{{ .title }}</strong></p>
+    <ol>
+      {{- range .steps }}
+      <li><strong>{{ .title }}.</strong> {{ .text | safeHTML }}</li>
+      {{- end }}
+    </ol>
+    {{- end }}
+  </details>
+  {{- with $d.caption }}
+  <figcaption class="flow-caption">{{ . | safeHTML }}</figcaption>
+  {{- end }}
+</figure>
